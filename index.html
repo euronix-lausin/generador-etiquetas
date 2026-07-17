@@ -275,16 +275,22 @@ function parsePedido(items){
   let clIdx = rightRows.findIndex(r=>/^CLIENTE$/i.test(lineText(r)));
   let clienteName='', addrLines=[];
   if(clIdx>=0){
-    clienteName = lineText(rightRows[clIdx+1]||{items:[]});
-    for(let i=clIdx+2; i<rightRows.length && addrLines.length<4; i++){
+    const block=[];
+    for(let i=clIdx+1; i<rightRows.length && block.length<10; i++){
       const t = lineText(rightRows[i]);
       if(/C[OÓ]DIGO\s+CLIENTE/i.test(t)) break;
-      addrLines.push(t);
+      block.push(t);
     }
+    const pais = block.pop()||'';
+    const provincia = block.pop()||'';
+    const cpCity = block.pop()||'';
+    const domicilioBlock = block.pop()||'';
+    clienteName = block.join(' ').trim();
+    addrLines = [domicilioBlock, cpCity, provincia, pais];
   }
 
   // --- override delivery address / contact in body ---
-  let ovIdx = allRows.findIndex(r=>/DIRECCI[OÓ]N\s+DE\s+EN\.?R?TEGA/i.test(lineText(r)));
+  let ovIdx = allRows.findIndex(r=>/DIRECCI[OÓ]N\s+DE\s+EN[RT]{1,2}EGA/i.test(lineText(r)));
   let overrideLines=[];
   if(ovIdx>=0){
     for(let i=ovIdx+1;i<allRows.length;i++){
@@ -297,11 +303,14 @@ function parsePedido(items){
     }
   }
   let overrideContacto='';
-  const addrOnly=[];
-  for(const l of overrideLines){
-    const m = l.match(/^(contacto|att\.?|atenci[oó]n)\b[:\s]*(.*)$/i);
-    if(m){ overrideContacto = m[2].trim(); }
-    else addrOnly.push(l);
+  let addrOnly=overrideLines;
+  const phoneRe = /\d[\d\s-]{5,}\d/;
+  const triggerIdx = overrideLines.findIndex(l => /\bcontacto\b/i.test(l) || /\batt\.?\b/i.test(l) || /\batenci[oó]n\b/i.test(l) || phoneRe.test(l) || /^(sr|sra)\.?\s/i.test(l));
+  if(triggerIdx>=0){
+    addrOnly = overrideLines.slice(0,triggerIdx);
+    let blob = overrideLines.slice(triggerIdx).join(' ');
+    blob = blob.replace(/^\s*(contacto|att\.?|atenci[oó]n)\b[:\s]*/i, '');
+    overrideContacto = blob.trim();
   }
 
   out.consignatario = clienteName;
