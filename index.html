@@ -99,8 +99,8 @@
     padding:3mm 4mm;
     display:flex;
     flex-direction:column;
+    justify-content:space-between;
     gap:1.4mm;
-    justify-content:flex-start;
   }
   .destino-row{display:flex;align-items:center;gap:6px;margin-bottom:1mm;}
   .destino-row .lab{font-weight:bold;color:var(--blue);font-size:13px;white-space:nowrap;}
@@ -132,6 +132,9 @@
     .panel, h1, .sub{display:none;}
     .sheet{box-shadow:none;margin:0;width:auto;height:291mm;min-height:291mm;page-break-after:always;}
     .sheet:last-child{page-break-after:auto;}
+    .label{border:none;}
+    .label:last-child{border-bottom:none;}
+    .lg-col{border-right:none;}
     @page{size:A4;margin:3mm;}
   }
 </style>
