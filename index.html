@@ -160,7 +160,7 @@
   <h2>2. Revisar / completar datos (se copian en las etiquetas)</h2>
   <div class="row">
     <div class="field"><label>DESTINO</label><input type="text" id="f_destino"></div>
-    <div class="field"><label>CONSIGNATARIO</label><input type="text" id="f_consignatario"></div>
+    <div class="field"><label>DESTINATARIO</label><input type="text" id="f_consignatario"></div>
   </div>
   <div class="row">
     <div class="field"><label>DOMICILIO</label><input type="text" id="f_domicilio"></div>
@@ -378,7 +378,7 @@ function buildLabelHTML(d){
   <div class="lg-col"><img src="${LOGO_B64}" alt="Lausín y Vicente"></div>
   <div class="data-col">
     <div class="destino-row"><span class="lab">DESTINO / DESTINATION</span><span class="destino-box">${escapeHtml(destino)}</span></div>
-    ${fieldLine('CONSIGNATARIO / CONSIGNEE:', d.consignatario, 30)}
+    ${fieldLine('DESTINATARIO / CONSIGNEE:', d.consignatario, 30)}
     ${fieldLine('DOMICILIO / ADDRESS:', d.domicilio, 34)}
     ${fieldLine('POBLACIÓN / CITY:', d.poblacion, 34)}
     ${fieldLine('CONTACTO / CONTACT:', d.contacto, 34)}
