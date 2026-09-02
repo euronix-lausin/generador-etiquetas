@@ -321,11 +321,12 @@ function parsePedido(items){
     overrideContacto = blob.trim();
   }
 
-  out.consignatario = clienteName;
   if(addrOnly.length>0){
-    out.domicilio = addrOnly[0]||'';
-    out.poblacion = addrOnly.slice(1).join(', ');
+    out.consignatario = addrOnly[0]||'';
+    out.domicilio = addrOnly[1]||'';
+    out.poblacion = addrOnly.slice(2).join(', ');
   } else {
+    out.consignatario = clienteName;
     out.domicilio = addrLines[0]||'';
     out.poblacion = [addrLines[1],addrLines[2],addrLines[3]].filter(Boolean).join(', ');
   }
