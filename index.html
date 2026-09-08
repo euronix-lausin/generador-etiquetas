@@ -207,15 +207,19 @@ document.getElementById('pdfInput').addEventListener('change', async (e) => {
   try{
     const buf = await file.arrayBuffer();
     const doc = await pdfjsLib.getDocument({data:buf}).promise;
-    const page = await doc.getPage(1);
-    const content = await page.getTextContent();
-    const items = content.items.map(it=>({str:it.str, x:it.transform[4], y:it.transform[5]}))
-                               .filter(it=>it.str.trim().length>0);
-    if(items.length < 10){
+    const pagesItems = [];
+    for(let p=1; p<=doc.numPages; p++){
+      const page = await doc.getPage(p);
+      const content = await page.getTextContent();
+      const items = content.items.map(it=>({str:it.str, x:it.transform[4], y:it.transform[5]}))
+                                 .filter(it=>it.str.trim().length>0);
+      pagesItems.push(items);
+    }
+    if(!pagesItems[0] || pagesItems[0].length < 10){
       statusEl.className=''; statusEl.textContent='No se pudo leer texto del PDF (parece escaneado). Rellena los datos a mano.';
       return;
     }
-    const data = parsePedido(items);
+    const data = parsePedido(pagesItems);
     fillForm(data);
     statusEl.className='ok'; statusEl.textContent='Datos extraídos. Revísalos antes de generar.';
   }catch(err){
@@ -250,12 +254,13 @@ function bucketRow(headerItems, valueItems){
 
 function lineText(row){ return row.items.map(i=>i.str).join(' ').trim(); }
 
-function parsePedido(items){
+function parsePedido(pagesItems){
+  const items = pagesItems[0]; // page 1 only, for header/client block
   const leftItems = items.filter(i=>i.x<300);
   const rightItems = items.filter(i=>i.x>=300);
   const leftRows = groupLines(leftItems);
   const rightRows = groupLines(rightItems);
-  const allRows = groupLines(items);
+  const allRowsPerPage = pagesItems.map(pageItems => groupLines(pageItems));
 
   const out = {destino:'',consignatario:'',domicilio:'',poblacion:'',contacto:'',portes:''};
 
@@ -297,29 +302,45 @@ function parsePedido(items){
     addrLines = [domicilioBlock, cpCity, provincia, pais];
   }
 
-  // --- override delivery address / contact in body ---
-  let ovIdx = allRows.findIndex(r=>/DIRECCI[OÓ]N\s+DE\s+EN[RT]{1,2}EGA/i.test(lineText(r)));
-  let overrideLines=[];
-  if(ovIdx>=0){
-    for(let i=ovIdx+1;i<allRows.length;i++){
-      const gap = allRows[i-1].y - allRows[i].y;
-      const t = lineText(allRows[i]);
+  // --- override delivery address / contact in body (may span onto the next page) ---
+  function collectFrom(rows, startIdx){
+    const out=[];
+    for(let i=startIdx;i<rows.length;i++){
+      const gap = rows[i-1].y - rows[i].y;
+      const t = lineText(rows[i]);
       if(gap>35) break;
       if(/^(SUMA|TOTAL PEDIDO|IMPORTES)\b/i.test(t)) break;
-      overrideLines.push(t);
-      if(overrideLines.length>=6) break;
+      out.push(t);
+      if(out.length>=6) break;
+    }
+    return out;
+  }
+  let overrideLines=[];
+  for(let p=0;p<allRowsPerPage.length;p++){
+    const rows = allRowsPerPage[p];
+    const ovIdx = rows.findIndex(r=>/DIRECCI[OÓ]N\s+DE\s+EN[RT]{1,2}EGA/i.test(lineText(r)));
+    if(ovIdx>=0){
+      overrideLines = collectFrom(rows, ovIdx+1);
+      if(overrideLines.length===0 && allRowsPerPage[p+1]){
+        // continues on next page without repeating the label: skip past the repeated
+        // page header down to the "CÓDIGO ... DENOMINACIÓN" item-table header, then read on
+        const nextRows = allRowsPerPage[p+1];
+        const tblIdx = nextRows.findIndex(r=>/C[OÓ]DIGO/i.test(lineText(r)) && /DENOMINACI[OÓ]N/i.test(lineText(r)));
+        if(tblIdx>=0) overrideLines = collectFrom(nextRows, tblIdx+1);
+      }
+      break;
     }
   }
+  // classify each override line individually as "address" or "contact",
+  // since the contact line can appear anywhere in the block (start, middle or end)
   let overrideContacto='';
-  let addrOnly=overrideLines;
   const phoneRe = /\d[\d\s-]{5,}\d/;
-  const triggerIdx = overrideLines.findIndex(l => /\bcontacto\b/i.test(l) || /\batt\.?\b/i.test(l) || /\batenci[oó]n\b/i.test(l) || phoneRe.test(l) || /^(sr|sra)\.?\s/i.test(l));
-  if(triggerIdx>=0){
-    addrOnly = overrideLines.slice(0,triggerIdx);
-    let blob = overrideLines.slice(triggerIdx).join(' ');
-    blob = blob.replace(/^\s*(contacto|att\.?|atenci[oó]n)\b[:\s]*/i, '');
-    overrideContacto = blob.trim();
-  }
+  const isContactLine = l => /\bcontacto\b/i.test(l) || /\batt\.?\b/i.test(l) || /\batenci[oó]n\b/i.test(l) || phoneRe.test(l) || /^(sr|sra)\.?\s/i.test(l);
+  const addrOnly = overrideLines.filter(l => !isContactLine(l));
+  const contactLines = overrideLines.filter(isContactLine).map(l =>
+    l.replace(/^\s*(persona\s+de\s+contacto|contacto|att|atenci[oó]n)\.?[:\s]*/i, '').trim()
+  );
+  overrideContacto = contactLines.join(' ');
 
   if(addrOnly.length>0){
     out.consignatario = addrOnly[0]||'';
@@ -334,7 +355,7 @@ function parsePedido(items){
   out.portes = portesVal;
   out.poblacion = out.poblacion.replace(/,\s*,/g, ',');
   const cpMatch = out.poblacion.match(/\d{4,5}\s+([^,]+)/);
-  out.destino = cpMatch ? cpMatch[1].trim() : (out.poblacion.split(',')[0]||out.domicilio).trim();
+  out.destino = (cpMatch ? cpMatch[1] : (out.poblacion.split(',')[0]||out.domicilio)).replace(/^[\s\-–—]+/, '').trim();
 
   return out;
 }
