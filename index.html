@@ -130,11 +130,19 @@
   @media print{
     body{background:#fff;padding:0;margin:0;}
     .panel, h1, .sub{display:none;}
-    .sheet{box-shadow:none;margin:0;width:210mm;height:297mm;min-height:297mm;padding:0;page-break-after:always;}
+    /* Sheet stays the true 210x297mm so the 4 labels keep landing exactly on the
+       physical quarter-cuts. The printer's own hardware margin (it cannot print
+       true edge-to-edge) is compensated by insetting the CONTENT inside the
+       outermost labels/sides, not by shrinking the labels themselves. */
+    .sheet{box-shadow:none;margin:0;width:210mm;height:297mm;min-height:297mm;padding:0 6mm;page-break-after:always;}
     .sheet:last-child{page-break-after:auto;}
     .label{border:none;}
     .label:last-child{border-bottom:none;}
     .lg-col{border-right:none;}
+    .sheet > .label:first-child .data-col,
+    .sheet > .label:first-child .lg-col{padding-top:8mm;}
+    .sheet > .label:last-child .data-col,
+    .sheet > .label:last-child .lg-col{padding-bottom:8mm;}
     @page{size:A4;margin:0;}
   }
 </style>
