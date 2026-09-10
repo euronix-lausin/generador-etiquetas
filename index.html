@@ -338,7 +338,7 @@ function parsePedido(pagesItems){
   let overrideLines=[];
   for(let p=0;p<allRowsPerPage.length;p++){
     const rows = allRowsPerPage[p];
-    const ovIdx = rows.findIndex(r=>/DIRECCI[OÓ]N\s+DE\s+EN[RT]{1,2}EGA/i.test(lineText(r)));
+    const ovIdx = rows.findIndex(r=>/DIRECCI[OÓ]N\s+DE\s+(EN[RT]{1,2}EGA|ENV[IÍ]O)/i.test(lineText(r)));
     if(ovIdx>=0){
       overrideLines = collectFrom(rows, ovIdx+1);
       if(overrideLines.length===0 && allRowsPerPage[p+1]){
