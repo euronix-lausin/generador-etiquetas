@@ -104,6 +104,18 @@
   }
   .destino-row{display:flex;align-items:center;gap:6px;margin-bottom:1mm;}
   .destino-row .lab{font-weight:bold;color:var(--blue);font-size:13px;white-space:nowrap;}
+  .num-badge{
+    flex:none;
+    font-weight:bold;
+    font-size:13px;
+    color:#fff;
+    background:var(--blue);
+    border-radius:3px;
+    padding:1.5mm 3mm;
+    white-space:nowrap;
+    -webkit-print-color-adjust:exact;
+    print-color-adjust:exact;
+  }
   .destino-box{
     border:1.4px solid var(--blue);
     border-radius:3px;
@@ -402,12 +414,13 @@ function escapeHtml(s){
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function buildLabelHTML(d){
+function buildLabelHTML(d, index, total){
   const destino = (d.destino||'').trim();
+  const numBadge = (total>1) ? `<span class="num-badge">${index}/${total}</span>` : '';
   return `
   <div class="lg-col"><img src="${LOGO_B64}" alt="Lausín y Vicente"></div>
   <div class="data-col">
-    <div class="destino-row"><span class="lab">DESTINO / DESTINATION</span><span class="destino-box">${escapeHtml(destino)}</span></div>
+    <div class="destino-row"><span class="lab">DESTINO / DESTINATION</span><span class="destino-box">${escapeHtml(destino)}</span>${numBadge}</div>
     ${fieldLine('DESTINATARIO / RECIPIENT:', d.consignatario, 30)}
     ${fieldLine('DOMICILIO / ADDRESS:', d.domicilio, 34)}
     ${fieldLine('POBLACIÓN / CITY:', d.poblacion, 34)}
@@ -439,6 +452,7 @@ function renderLabels(){
   wrap.innerHTML='';
   const numSheets = Math.ceil(copies/4);
   let remaining = copies;
+  let labelIndex = 0;
   for(let s=0;s<numSheets;s++){
     const sheet = document.createElement('div');
     sheet.className='sheet';
@@ -446,7 +460,8 @@ function renderLabels(){
       const lab = document.createElement('div');
       if(remaining>0){
         lab.className='label';
-        lab.innerHTML = buildLabelHTML(d);
+        labelIndex++;
+        lab.innerHTML = buildLabelHTML(d, labelIndex, copies);
         remaining--;
       } else {
         lab.className='label blank';
