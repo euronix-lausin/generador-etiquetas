@@ -274,6 +274,44 @@ function bucketRow(headerItems, valueItems){
 
 function lineText(row){ return row.items.map(i=>i.str).join(' ').trim(); }
 
+// --- fuzzy matching helpers (tolerate small typos like "DIRECCON" or "ENRTEGA") ---
+function normKey(s){
+  return (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z]/g,'');
+}
+function levenshtein(a,b){
+  const m=a.length, n=b.length;
+  if(m===0) return n;
+  if(n===0) return m;
+  const dp = new Array(n+1);
+  for(let j=0;j<=n;j++) dp[j]=j;
+  for(let i=1;i<=m;i++){
+    let prev = dp[0];
+    dp[0]=i;
+    for(let j=1;j<=n;j++){
+      const tmp = dp[j];
+      dp[j] = a[i-1]===b[j-1] ? prev : 1+Math.min(prev, dp[j], dp[j-1]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+// true if the phrase (e.g. "DIRECCIONDEENTREGA") appears anywhere in the line, allowing a
+// small typo (missing/extra/swapped letter) in any of its words. Scans word-by-word like the
+// old regex did with .test() (which matched anywhere in the string, not just at the start).
+function fuzzyContainsPhrase(text, targets){
+  const words = (text||'').split(/\s+/).map(normKey).filter(Boolean);
+  for(const t of targets){
+    for(let start=0; start<words.length; start++){
+      let acc='';
+      for(let end=start; end<words.length && acc.length<t.length+8; end++){
+        acc += words[end];
+        if(Math.abs(acc.length-t.length)<=2 && levenshtein(acc, t)<=2) return true;
+      }
+    }
+  }
+  return false;
+}
+
 function parsePedido(pagesItems){
   const items = pagesItems[0]; // page 1 only, for header/client block
   const leftItems = items.filter(i=>i.x<300);
@@ -294,7 +332,25 @@ function parsePedido(pagesItems){
   });
 
   let contactoNombre='', telefono='', portesVal='';
-  if(hdr2>=0 && leftRows[hdr2+1]){
+  // Find PORTES by its column header label rather than assuming which row it's in:
+  // in un PEDIDO normal está en la fila de AGENCIA TRANSPORTES, pero en un ALBARÁN hay una fila
+  // extra arriba (ALBARÁN Nº/FECHA/MEDIACIÓN) que desplaza todo, y la fila de AGENCIA pasa a
+  // tener BULTOS en esa misma posición en vez de PORTES. Buscando el propio rótulo "PORTES"
+  // funciona con cualquiera de las dos plantillas.
+  let hdrPortesIdx=-1, portesColIdx=-1;
+  for(let i=0;i<leftRows.length;i++){
+    const its = leftRows[i].items;
+    const idx = its.findIndex(it=>{
+      const k = normKey(it.str);
+      return k==='PORTES' || (k.length>=5 && levenshtein(k,'PORTES')<=1);
+    });
+    if(idx>=0){ hdrPortesIdx=i; portesColIdx=idx; break; }
+  }
+  if(hdrPortesIdx>=0 && leftRows[hdrPortesIdx+1]){
+    const b = bucketRow(leftRows[hdrPortesIdx].items, leftRows[hdrPortesIdx+1].items);
+    portesVal = (b[portesColIdx]||'').trim();
+  } else if(hdr2>=0 && leftRows[hdr2+1]){
+    // fallback al comportamiento anterior si no se encuentra el rótulo PORTES
     const b = bucketRow(leftRows[hdr2].items, leftRows[hdr2+1].items);
     portesVal = (b[2]||'').trim();
   }
@@ -331,14 +387,17 @@ function parsePedido(pagesItems){
       if(gap>35) break;
       if(/^(SUMA|TOTAL PEDIDO|IMPORTES)\b/i.test(t)) break;
       out.push(t);
-      if(out.length>=6) break;
+      // el bloque de entrega siempre cabe en 4 líneas reales (nombre, calle, población, contacto
+      // -- los 4 campos de la etiqueta); a partir de ahí suele ser una nota suelta sin relación
+      // (ej. "adelantados anclajes... 1 bulto por mailboxes") que solo ensuciaría la POBLACIÓN.
+      if(out.length>=4) break;
     }
     return out;
   }
   let overrideLines=[];
   for(let p=0;p<allRowsPerPage.length;p++){
     const rows = allRowsPerPage[p];
-    const ovIdx = rows.findIndex(r=>/DIRECCI[OÓ]N\s+DE\s+(EN[RT]{1,2}EGA|ENV[IÍ]O)/i.test(lineText(r)));
+    const ovIdx = rows.findIndex(r=>fuzzyContainsPhrase(lineText(r), ['DIRECCIONDEENTREGA','DIRECCIONDEENVIO']));
     if(ovIdx>=0){
       overrideLines = collectFrom(rows, ovIdx+1);
       if(overrideLines.length===0 && allRowsPerPage[p+1]){
