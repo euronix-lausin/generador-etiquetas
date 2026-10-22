@@ -379,8 +379,10 @@ function parsePedido(pagesItems){
       block.push(t);
     }
     const pais = block.pop()||'';
-    const provincia = block.pop()||'';
-    const cpCity = block.pop()||'';
+    let provincia = '', cpCity = '';
+    const prev = block.pop()||'';
+    if(/\d/.test(prev)){ cpCity = prev; }          // extranjero: sin línea de provincia
+    else { provincia = prev; cpCity = block.pop()||''; }
     const domicilioBlock = block.pop()||'';
     clienteName = block.join(' ').trim();
     addrLines = [domicilioBlock, cpCity, provincia, pais];
@@ -397,6 +399,7 @@ function parsePedido(pagesItems){
       // notas sueltas de logística (ej. "adelantados anclajes... 1 bulto por mailboxes 11€")
       // no son ni dirección ni contacto: cortar aquí en vez de dejar que ensucien la POBLACIÓN.
       if(/[€$]/.test(t) || /\bbultos?\b/i.test(t)) break;
+      if(/^\s*[*•]/.test(t)) break;
       out.push(t);
       if(out.length>=6) break;
     }
@@ -405,7 +408,7 @@ function parsePedido(pagesItems){
   let overrideLines=[];
   for(let p=0;p<allRowsPerPage.length;p++){
     const rows = allRowsPerPage[p];
-    const ovIdx = rows.findIndex(r=>fuzzyContainsPhrase(lineText(r), ['DIRECCIONDEENTREGA','DIRECCIONDEENVIO']));
+    const ovIdx = rows.findIndex(r=>fuzzyContainsPhrase(lineText(r), ['DIRECCIONDEENTREGA','DIRECCIONDEENVIO','DELIVERYADDRESS','SHIPPINGADDRESS','ADRESSEDELIVRAISON']));
     if(ovIdx>=0){
       overrideLines = collectFrom(rows, ovIdx+1);
       if(overrideLines.length===0 && allRowsPerPage[p+1]){
@@ -429,7 +432,15 @@ function parsePedido(pagesItems){
   );
   overrideContacto = contactLines.join(' ');
 
-  if(addrOnly.length>0){
+  if(addrOnly.length===1 && addrOnly[0].indexOf(',')>=0){
+    // dirección entera en una sola línea, sin nombre de sitio: se reparte por comas
+    const toks = addrOnly[0].replace(/[.\s]+$/,'').split(',').map(s=>s.trim()).filter(Boolean);
+    let k = toks.findIndex(t=>/\d{3,}/.test(t));
+    if(k<=0) k = Math.max(1, toks.length-2);
+    out.consignatario = clienteName;
+    out.domicilio = toks.slice(0,k).join(', ');
+    out.poblacion = toks.slice(k).join(', ');
+  } else if(addrOnly.length>0){
     out.consignatario = addrOnly[0]||'';
     out.domicilio = addrOnly[1]||'';
     out.poblacion = addrOnly.slice(2).join(', ');
@@ -442,7 +453,9 @@ function parsePedido(pagesItems){
   out.portes = portesVal;
   out.poblacion = out.poblacion.replace(/,\s*,/g, ',');
   const cpMatch = out.poblacion.match(/\d{4,5}\s+([^,]+)/);
-  out.destino = (cpMatch ? cpMatch[1] : (out.poblacion.split(',')[0]||out.domicilio)).replace(/^[\s\-–—]+/, '').trim();
+  const popToks = out.poblacion.split(',').map(s=>s.trim()).filter(Boolean);
+  const nonNum = popToks.filter(t=>!/\d/.test(t));
+  out.destino = (cpMatch ? cpMatch[1] : (nonNum.length ? nonNum[nonNum.length-1] : (popToks[0]||out.domicilio))).replace(/^[\s\-–—]+/, '').replace(/[.\s]+$/,'').trim();
 
   return out;
 }
