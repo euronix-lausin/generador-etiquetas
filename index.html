@@ -136,6 +136,8 @@
   .fline.shrink-2 .val{font-size:9.2px;}
   .triple{display:flex;gap:10px;font-size:11.5px;}
   .triple .fline{flex:1;}
+  .triple .fline .val{white-space:nowrap;}
+  .tpl-st .triple .fline{flex:1 1 auto;min-width:0;}
   .tipo{font-size:11px;margin-top:2px;}
   .tipo .val{font-weight:bold;}
 
@@ -396,7 +398,7 @@ function parsePedido(pagesItems){
       const t = lineText(rows[i]);
       if(gap>35) break;
       if(/^(SUMA|TOTAL PEDIDO|IMPORTES)\b/i.test(t)) break;
-      // notas sueltas de logística (ej. "adelantados anclajes... 1 bulto por mailboxes 11€")
+      // notas sueltas de logística (con importes o "bultos"):
       // no son ni dirección ni contacto: cortar aquí en vez de dejar que ensucien la POBLACIÓN.
       if(/[€$]/.test(t) || /\bbultos?\b/i.test(t)) break;
       if(/^\s*[*•]/.test(t)) break;
@@ -408,7 +410,7 @@ function parsePedido(pagesItems){
   let overrideLines=[];
   for(let p=0;p<allRowsPerPage.length;p++){
     const rows = allRowsPerPage[p];
-    const ovIdx = rows.findIndex(r=>fuzzyContainsPhrase(lineText(r), ['DIRECCIONDEENTREGA','DIRECCIONDEENVIO','DELIVERYADDRESS','SHIPPINGADDRESS','ADRESSEDELIVRAISON']));
+    const ovIdx = rows.findIndex(r=>fuzzyContainsPhrase(lineText(r), ['DIRECCIONDEENTREGA','DIRECCIONDEENVIO','DELIVERYADDRESS','SHIPPINGADDRESS','ADRESSEDELIVRAISON','PLACEOFDELIVERY','ADDRESSOFDELIVERY']));
     if(ovIdx>=0){
       overrideLines = collectFrom(rows, ovIdx+1);
       if(overrideLines.length===0 && allRowsPerPage[p+1]){
@@ -481,6 +483,7 @@ const TEMPLATES = {
     logo: LOGO_B64,
     logoAlt: 'Lausín y Vicente',
     hasContacto: true,
+    cls: '',
     labels: {
       destino: 'DESTINO / DESTINATION',
       destinatario: 'DESTINATARIO / RECIPIENT:',
@@ -501,6 +504,7 @@ const TEMPLATES = {
     logo: SPORTTHIEME_B64,
     logoAlt: 'Sport-Thieme',
     hasContacto: false,
+    cls: 'tpl-st',
     labels: {
       destino: 'ZIELORT / DESTINATION',
       destinatario: 'EMPFÄNGER / CONSIGNEE:',
@@ -545,7 +549,7 @@ function buildLabelHTML(d, index, total, tpl){
   const contactoLine = (tpl.hasContacto!==false) ? fieldLine(L.contacto, d.contacto, 34) : '';
   return `
   <div class="lg-col"><img src="${tpl.logo}" alt="${tpl.logoAlt}"></div>
-  <div class="data-col">
+  <div class="data-col ${tpl.cls||''}">
     <div class="destino-row"><span class="lab">${L.destino}</span><span class="destino-box">${escapeHtml(destino)}</span>${numBadge}</div>
     ${fieldLine(L.destinatario, d.consignatario, 30)}
     ${fieldLine(L.domicilio, d.domicilio, 34)}
